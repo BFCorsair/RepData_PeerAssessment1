@@ -1,0 +1,178 @@
+---
+title: "Activity Monitor"
+author: "Bernard Fraenkel"
+date: "September 19, 2015"
+output: html_document
+---
+```{r setoptions, echo=FALSE}
+knitr::opts_chunk$set(echo=TRUE,warning=FALSE)
+```
+
+# Introduction
+
+## Loading libraries and raw data 
+
+```{r, results=FALSE, message=FALSE}
+# Code for Project 1 of Coursera Reproducible Research Course
+# 9/16/2015
+
+library(ggplot2)
+library(gridExtra)
+library(plyr) # Has to be before dplyr
+library(dplyr)
+
+# 1. Load the data
+activity <- read.csv("activity.csv")
+message(paste0("#Records in activity: "), nrow(activity))
+```
+
+## Processing the raw data into a format suitable for your analysis
+
+The first remove records that have NA values
+```{r, message=FALSE}
+# Filter out the NAs
+activity_clean <- activity[complete.cases(activity),]
+message(paste0("#Records in activity_clean: "), nrow(activity_clean))
+```
+## Mean total number of steps taken per day
+
+``` {r, message=TRUE}
+# Calculate the total number of steps taken per day
+daily_steps <- ddply(activity_clean, .(date), summarize, sum_steps=sum(steps))
+av_daily_steps <- mean(daily_steps$sum_steps)
+message(paste0("Mean total number of steps taken per day: "), round(av_daily_steps,0))
+```
+
+The plot below shows the total number of steps taken each day
+
+```{r}
+g <- ggplot(daily_steps,aes(date, sum_steps))
+g <- g + geom_point() + ggtitle("Total number of steps taken per day")
+g
+```
+
+## Histogram of the total number of steps taken each day
+```{r}
+qplot(sum_steps, data=daily_steps, geom="histogram", main="Histogram of total number of steps per day")
+```
+
+## Mean and median of the total number of steps taken per day
+``` {r, message=TRUE}
+mean_steps <- mean(daily_steps$sum_steps)
+# mean_steps <- round(mean_steps,9)
+median_steps <- median(daily_steps$sum_steps)
+# median_steps <- round(median_steps,0)
+message(paste0("daily average number of steps:", round(mean_steps,2)))
+message(paste0("median of steps taken per day:", round(median_steps,2)))
+```
+  
+
+
+## Average daily activity pattern
+
+This is a time series plot of the 5-minute interval (x-axis) and the average number of steps taken, averaged across all days (y-axis)
+
+```{r}
+interval_steps <- ddply(activity_clean, .(interval), summarize, sum_steps=sum(steps))
+nb_days <- nrow(daily_steps)  # Number of days for which we have observations
+# compute the average number of steps per interval
+av_steps <- mutate(interval_steps, sum_steps = sum_steps/nb_days)
+colnames(av_steps) <- c("interval", "avrg_steps")
+g <- ggplot(av_steps, aes(interval, avrg_steps))
+g <- g+geom_line(size=1,colour="blue")  + ggtitle("Daily average number of steps per interval")
+g
+```
+
+## Interval with maximum number of steps
+
+The  5-minute interval, on average across all the days in the dataset, which contains the maximum number of steps is 
+```{r}
+av_steps_ordered <- av_steps[with(av_steps, order(-avrg_steps)),]
+message(paste0("Interval with maximum number of steps: ", av_steps_ordered[1,"interval"]))
+```
+
+The time of *maximum activity is thus around 8:30 ins the morning*  
+The plot also shows minor peaks at the typical times of activity: 12pm, 3:30pm and 7pm
+
+# Imputing missing values
+
+## Total number of missing values in the dataset
+```{r}
+activity_NA <- filter(activity, is.na(steps))
+na_rows <- nrow(activity_NA)
+message(paste0("#rows with missing data: "), na_rows, " - out of a total of: ", nrow(activity))
+```
+
+
+## Filling in all of the missing values in the dataset
+
+The code below fills in missing data for a given interval with the overall average value for that interval
+
+```{r}
+
+# Replace NA values with the average values obtained from records with non-missing values: av_steps
+# Create a new dataset that is equal to the original dataset but with the missing data filled in.
+# Round the averages 
+# activity_full <- mutate(activity, steps = ifelse(is.na(steps), round(av_steps[av_steps$interval == interval, "avrg_steps"],0), steps))
+activity_full <- mutate(activity, steps = ifelse(is.na(steps), round(av_steps[match(interval,av_steps$interval), "avrg_steps"],0), steps))
+if(any(is.na(activity_full))) stop ("still some NAs")
+```
+
+
+## Histogram of the total number of steps taken each day
+```{r}
+daily_steps_full <- ddply(activity_full, .(date), summarize, sum_steps=sum(steps))
+qplot(sum_steps, data=daily_steps_full, geom="histogram",  main="Histogram of total number of steps per day")
+
+# Calculate and report the mean and median total number of steps taken per day.
+mean_steps_full <- mean(daily_steps_full$sum_steps)
+median_steps_full <- median(daily_steps_full$sum_steps)
+
+message(paste0("daily average number of steps - after NA replacement:", round(mean_steps_full,2)))
+message(paste0("median of steps taken per day  - after NA replacement:", round(median_steps_full,2)))
+```
+
+These values differ from the estimates from the first part of the assignment   
+
+
+Imputing missing data on the estimates of the total daily number of steps?
+
+## Differences in activity patterns between weekdays and weekends
+Note that we use the dataset with the filled-in missing values for this part  
+```{r}
+# Function to convert weekday names to weekday/weekend
+day_vs_end <- function(date_str) {
+	wkday <- weekdays(as.Date(date_str))
+	ifelse(wkday == "Saturday" | wkday == "Sunday", "weekend", "weekday")
+}
+activity_final <- mutate(activity_full, day_vs_end = day_vs_end(date))
+activity_final <- mutate(activity_final, day_vs_end = as.factor(day_vs_end))
+# Split data set into 2
+activity_weekday <- activity_final[activity_final$day_vs_end == "weekday", c("interval", "steps")]
+activity_weekend <- activity_final[activity_final$day_vs_end == "weekend", c("interval", "steps")]
+# interval_steps_final <- ddply(activity_final, .(interval), summarize, sum_steps=sum(steps))
+
+
+# Make a panel plot containing a time series plot (i.e. type = "l") of the 5-minute interval (x-axis)
+# and the average number of steps taken, averaged across all weekday days or weekend days (y-axis).
+nb_wkdy <- nrow(activity_weekday)/288  # 288 5-min intervals per day
+nb_wknd <- nrow(activity_weekend)/288
+interval_steps_weekday <- ddply(activity_weekday, .(interval), summarize, av_steps=sum(steps)/nb_wkdy)
+interval_steps_weekend <- ddply(activity_weekend, .(interval), summarize, av_steps=sum(steps)/nb_wknd)
+message(paste0("Average number of steps per 5-min on weekdays: ", round(sum(interval_steps_weekday$av_steps),2)))
+message(paste0("Average number of steps  per 5-min on weekend days: ", round(sum(interval_steps_weekend$av_steps),2)))
+```
+
+This shows that the subject is about _20% more active during weekends_
+
+The 2 plots below compare activity during weekdays versus weekends
+- During weekdays, activity is  concentrated mostly around 8:30am - one can assume this is time reserved for working out  
+- During weekdends, overall activity starts much later (9am vs 5am) compared to weekdays - it is also roughly evenly spread out during the day (vs weekdays when activity is concentrated at "work-out" times)
+
+```{r}
+g <- ggplot(interval_steps_weekday,aes(interval, av_steps))
+g <- g+geom_line(size=1,colour="blue") + ggtitle("Daily activity during weekdays") + ylim(0,250)
+q <- ggplot(interval_steps_weekend,aes(interval, av_steps))
+q <- q+geom_line(size=1,colour="red") + ggtitle("Daily activity during weekend") + ylim(0,250)
+grid.arrange(g, q, nrow=2)
+```
