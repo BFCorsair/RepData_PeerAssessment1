@@ -3,6 +3,7 @@ title: "Activity Monitor"
 author: "Bernard Fraenkel"
 date: "September 19, 2015"
 output: html_document
+    keep_md: true
 ---
 ```{r setoptions, echo=FALSE}
 knitr::opts_chunk$set(echo=TRUE,warning=FALSE)
@@ -38,13 +39,15 @@ The first remove records that have NA values
 activity_clean <- activity[complete.cases(activity),]
 message(paste0("#Records in activity_clean: "), nrow(activity_clean))
 ```
-## Mean total number of steps taken per day
+## Mean and median of total number of steps taken per day
 The code below computes the total number of steps each day, and then computes the average
 ``` {r, message=TRUE}
 # Calculate the total number of steps taken per day
 daily_steps <- ddply(activity_clean, .(date), summarize, sum_steps=sum(steps))
 av_daily_steps <- mean(daily_steps$sum_steps)
 message(paste0("Mean total number of steps taken per day: "), round(av_daily_steps,0))
+med_daily_steps <- median(daily_steps$sum_steps)
+message(paste0("Median of total number of steps taken per day: "), round(med_daily_steps,0))
 ```
 
 The plot below shows the total number of steps taken each day
@@ -129,7 +132,7 @@ if(any(is.na(activity_full))) stop ("still some NAs")
 ## Histogram of the total number of steps taken each day
 ```{r}
 daily_steps_full <- ddply(activity_full, .(date), summarize, sum_steps=sum(steps))
-qplot(sum_steps, data=daily_steps_full, geom="histogram",  main="Histogram of total number of steps per day")
+qplot(sum_steps, data=daily_steps_full, geom="histogram",  main="Histogram of total number of steps per day after imputing missing data")
 
 # Calculate and report the mean and median total number of steps taken per day.
 mean_steps_full <- mean(daily_steps_full$sum_steps)
